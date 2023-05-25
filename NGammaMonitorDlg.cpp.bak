@@ -1,0 +1,628 @@
+﻿
+// NGammaMonitorDlg.cpp: 实现文件
+//
+//#pragma comment(lib,"json.lib")
+#include "json/json.h"
+
+#include "pch.h"
+#include "framework.h"
+#include "NGammaMonitor.h"
+#include "NGammaMonitorDlg.h"
+#include "afxdialogex.h"
+#include "Order.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+// 文件操作
+#include <iostream>
+#include <fstream>
+using namespace std;
+
+// 用于应用程序“关于”菜单项的 CAboutDlg 对话框
+
+class CAboutDlg : public CDialogEx
+{
+public:
+	CAboutDlg();
+
+// 对话框数据
+#ifdef AFX_DESIGN_TIME
+	enum { IDD = IDD_ABOUTBOX };
+#endif
+
+	protected:
+	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV 支持
+
+// 实现
+protected:
+	DECLARE_MESSAGE_MAP()
+};
+
+CAboutDlg::CAboutDlg() : CDialogEx(IDD_ABOUTBOX)
+{
+}
+
+void CAboutDlg::DoDataExchange(CDataExchange* pDX)
+{
+	CDialogEx::DoDataExchange(pDX);
+}
+
+BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
+END_MESSAGE_MAP()
+
+
+// CNGammaMonitorDlg 对话框
+
+
+
+CNGammaMonitorDlg::CNGammaMonitorDlg(CWnd* pParent /*=nullptr*/)
+	: CDialogEx(IDD_NGAMMAMONITOR_DIALOG, pParent)
+	, connectStatus(FALSE)
+	, MeasureStatus(FALSE)
+	, AutoMeasureStatus(FALSE)
+	, GetDataStatus(FALSE)
+	, m_getTargetChange(FALSE)
+	, timer(0)
+	, saveAsPath("")
+	, sPort(6000)
+	, m_targetID(_T(""))
+	, m_UDPPort(12100)
+{
+	m_hIcon = AfxGetApp()->LoadIcon(IDR_NUCLEAR); //设置主界面图标
+}
+
+CNGammaMonitorDlg::~CNGammaMonitorDlg()
+{
+	KillTimer(3); //炮号刷新的计时器
+	if (m_UDPSocket != NULL) delete m_UDPSocket;
+}
+
+// 绑定变量与控件
+void CNGammaMonitorDlg::DoDataExchange(CDataExchange* pDX)
+{
+	CDialogEx::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_LED, m_NetStatusLED);		// “建立链接”LED
+													//DDX_Control(pDX, IDC_TargetNum, m_TargetID);
+	DDX_Control(pDX, IDC_IPADDRESS1, ServerIP);
+	DDX_Text(pDX, IDC_PORT1, sPort);
+	DDX_Control(pDX, IDC_COMBO1, m_TriggerType);
+	DDX_Text(pDX, IDC_TargetNum, m_targetID);
+	DDX_Text(pDX, IDC_UDPPORT, m_UDPPort);
+}
+
+BEGIN_MESSAGE_MAP(CNGammaMonitorDlg, CDialogEx)
+	ON_WM_SYSCOMMAND()
+	ON_WM_PAINT()
+	ON_WM_QUERYDRAGICON()
+	ON_WM_TIMER()
+	ON_BN_CLICKED(IDC_CONNECT1, &CNGammaMonitorDlg::OnConnect)
+	ON_EN_KILLFOCUS(IDC_PORT1, &CNGammaMonitorDlg::OnEnKillfocusPort1)
+	ON_BN_CLICKED(IDC_Start, &CNGammaMonitorDlg::OnBnClickedStart)
+	ON_BN_CLICKED(IDC_AutoMeasure, &CNGammaMonitorDlg::OnBnClickedAutomeasure)
+	ON_EN_KILLFOCUS(IDC_UDPPORT, &CNGammaMonitorDlg::OnEnKillfocusUDPPort)
+	ON_BN_CLICKED(IDC_SaveAs, &CNGammaMonitorDlg::OnBnClickedSaveas)
+END_MESSAGE_MAP()
+
+
+// CNGammaMonitorDlg 消息处理程序
+
+BOOL CNGammaMonitorDlg::OnInitDialog()
+{
+	CDialogEx::OnInitDialog();
+
+	// 将“关于...”菜单项添加到系统菜单中。
+
+	// IDM_ABOUTBOX 必须在系统命令范围内。
+	ASSERT((IDM_ABOUTBOX & 0xFFF0) == IDM_ABOUTBOX);
+	ASSERT(IDM_ABOUTBOX < 0xF000);
+
+	CMenu* pSysMenu = GetSystemMenu(FALSE);
+	if (pSysMenu != nullptr)
+	{
+		BOOL bNameValid;
+		CString strAboutMenu;
+		bNameValid = strAboutMenu.LoadString(IDS_ABOUTBOX);
+		ASSERT(bNameValid);
+		if (!strAboutMenu.IsEmpty())
+		{
+			pSysMenu->AppendMenu(MF_SEPARATOR);
+			pSysMenu->AppendMenu(MF_STRING, IDM_ABOUTBOX, strAboutMenu);
+		}
+	}
+
+	// 设置此对话框的图标。  当应用程序主窗口不是对话框时，框架将自动
+	//  执行此操作
+	SetIcon(m_hIcon, TRUE);			// 设置大图标
+	SetIcon(m_hIcon, FALSE);		// 设置小图标
+
+	// TODO: 在此添加额外的初始化代码
+	UpdateData(TRUE); //表示写数据，将窗口控制变量写入内存（更新数据）
+	//UpdateData(FALSE); //表示读数据，即显示窗口读取内存的数据以供实时显示
+	m_NetStatusLED.RefreshWindow(FALSE);//设置指示灯
+	SetDlgItemText(IDC_IPADDRESS1, _T("192.168.10.22"));
+	SetDlgItemText(IDC_PORT1,_T("6000"));
+	m_TriggerType.SetCurSel(0); // 设置下拉框默认选项
+	
+	//打开定时器3，用来刷新炮号
+	SetTimer(3, 100, NULL);  //100
+	OpenUDP();
+	
+	// 获取当前程序所在路径
+	
+	//////获取 .exe文件所在路径
+	CString strexe, strpath;
+	::GetModuleFileName(NULL, strexe.GetBufferSetLength(MAX_PATH + 1), MAX_PATH);
+	int k = 0;
+	int lo_point = strexe.ReverseFind('.');
+	int lo_x = strexe.ReverseFind('x');
+	int lo_e = strexe.ReverseFind('e');
+	if ((lo_point == lo_e - 3) && (lo_point == lo_x - 2))
+	{
+		k = lo_point - 25;
+	}
+	saveAsPath = strexe.Left(k);
+
+	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
+}
+
+void CNGammaMonitorDlg::OnSysCommand(UINT nID, LPARAM lParam)
+{
+	if ((nID & 0xFFF0) == IDM_ABOUTBOX)
+	{
+		CAboutDlg dlgAbout;
+		dlgAbout.DoModal();
+	}
+	else
+	{
+		CDialogEx::OnSysCommand(nID, lParam);
+	}
+}
+
+// 如果向对话框添加最小化按钮，则需要下面的代码
+//  来绘制该图标。  对于使用文档/视图模型的 MFC 应用程序，
+//  这将由框架自动完成。
+
+void CNGammaMonitorDlg::OnPaint()
+{
+	if (IsIconic())
+	{
+		CPaintDC dc(this); // 用于绘制的设备上下文
+
+		SendMessage(WM_ICONERASEBKGND, reinterpret_cast<WPARAM>(dc.GetSafeHdc()), 0);
+
+		// 使图标在工作区矩形中居中
+		int cxIcon = GetSystemMetrics(SM_CXICON);
+		int cyIcon = GetSystemMetrics(SM_CYICON);
+		CRect rect;
+		GetClientRect(&rect);
+		int x = (rect.Width() - cxIcon + 1) / 2;
+		int y = (rect.Height() - cyIcon + 1) / 2;
+
+		// 绘制图标
+		dc.DrawIcon(x, y, m_hIcon);
+	}
+	else
+	{
+		CDialogEx::OnPaint();
+	}
+}
+
+//当用户拖动最小化窗口时系统调用此函数取得光标
+//显示。
+HCURSOR CNGammaMonitorDlg::OnQueryDragIcon()
+{
+	return static_cast<HCURSOR>(m_hIcon);
+}
+
+// 连接网络
+void CNGammaMonitorDlg::OnConnect()
+{
+	UpdateData(TRUE); //是控件变量的值与界面编辑值同步
+	// TODO: 在此添加控件通知处理程序代码
+	// IDC_CONNECT1为连接控件的按钮，设置该按钮不响应操作，防止用户连续点击多次
+	GetDlgItem(IDC_CONNECT1)->EnableWindow(FALSE);
+	GetDlgItem(IDC_IPADDRESS1)->EnableWindow(FALSE);
+	GetDlgItem(IDC_PORT1)->EnableWindow(FALSE);
+
+	CString strTemp;
+	GetDlgItemText(IDC_CONNECT1, strTemp);
+	if (strTemp == _T("连接网络")){
+		// 1、创建套接字
+		mySocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (mySocket == NULL) {
+			MessageBox(_T("ClientSocket创建失败！"), _T("信息提示："), MB_OKCANCEL | MB_ICONERROR);
+			GetDlgItem(IDC_CONNECT1)->EnableWindow(TRUE);
+			return;
+		}
+		
+		// 2、连接服务器
+		CString StrSerIp;
+		GetDlgItemText(IDC_IPADDRESS1, StrSerIp);
+		char* pStrIP = CstringToWideCharArry(StrSerIp);
+
+		// 写入配置文件
+		Json::Value jsonSetting = ReadSetting();
+		jsonSetting["IP_Detector"] = pStrIP;
+		jsonSetting["Port_Detector"] = sPort;
+		WriteSetting(jsonSetting);
+
+		sockaddr_in server_addr;
+		//server_addr.sin_addr.s_addr = inet_pton(pStrIP);// 网络IP "192.168.0.105"
+		inet_pton(AF_INET, pStrIP, (void*)&server_addr.sin_addr.S_un.S_addr);
+		server_addr.sin_family = AF_INET;  // 使用IPv4地址
+		server_addr.sin_port = htons(sPort); //网关：5000
+		
+		// 3、检测网络是否连接,以及显示设备联网状况
+		if (connect(mySocket, (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR){
+			m_NetStatusLED.RefreshWindow(FALSE);//打开指示灯
+			connectStatus = FALSE;
+			MessageBox(_T("设备连接失败。请重新尝试，若再次连接失败,请做以下尝试:\
+             1、检查网络参数设置是否正确；2、检查设备电源是否打开；\
+			 3、检查工控机的网络适配器属性设置是否正确")); 
+			GetDlgItem(IDC_CONNECT1)->EnableWindow(TRUE);
+			GetDlgItem(IDC_IPADDRESS1)->EnableWindow(TRUE); //恢复IP地址编辑状态
+			GetDlgItem(IDC_PORT1)->EnableWindow(TRUE); //恢复端口编辑
+			return;
+		}
+		connectStatus = TRUE;
+		m_NetStatusLED.RefreshWindow(TRUE);//打开指示灯
+		// 4、发送数据，设置硬件参数
+		//char msg1[6] = { 0x80,0x01,0x00,0x00,0x00,0xF1 };// 开启第一组偏压监测
+		
+		send(mySocket, Order::WaveRefreshTime, 24, 0);
+		//send(mySocket, msg1, 6, 0);
+		AfxBeginThread(&Recv_Th1, 0); //开启线程接收数据
+		SetDlgItemText(IDC_CONNECT1, _T("断开网络"));
+	}
+	else{
+		// 1、发送数据，在断开网络前进行相应关闭动作
+		//unsigned char msg1[6] = { 0x80,0x01,0x00,0x00,0x00,0x00 };// 开启第一组偏压监测
+		//send(mySocket, msg1, 6, 0);
+		closesocket(mySocket); //关闭套接字。
+		connectStatus = FALSE;
+		m_NetStatusLED.RefreshWindow(FALSE);//打开指示灯
+		SetDlgItemText(IDC_CONNECT1, _T("连接网络"));
+		GetDlgItem(IDC_IPADDRESS1)->EnableWindow(TRUE); //恢复IP地址编辑状态
+		GetDlgItem(IDC_PORT1)->EnableWindow(TRUE); //恢复端口编辑
+	}
+	GetDlgItem(IDC_CONNECT1)->EnableWindow(TRUE); // 恢复按钮使能
+}
+
+char* CNGammaMonitorDlg::CstringToWideCharArry(CString CstrText)
+{
+	int lth = WideCharToMultiByte(CP_ACP, 0, CstrText, CstrText.GetLength(), NULL, 0, NULL, NULL);
+	char* pStr = (char*)malloc((lth + 1) * sizeof(char));
+	ASSERT(pStr != NULL);
+	memset(pStr, 0, (lth + 1) * sizeof(char));
+	WideCharToMultiByte(CP_ACP, 0, CstrText.GetBuffer(), CstrText.GetLength(), (LPSTR)pStr, lth, NULL, NULL);
+	*(pStr + lth + 1) = '\0';
+	/*printf("lth=%d", lth);
+	printf("lth+1=%d", (lth + 1) * sizeof(char));
+	printf("LthStr=%d", sizeof(CString));
+	printf("CharLen=%d", sizeof(char*));
+	*/
+	return pStr;
+}
+
+Json::Value CNGammaMonitorDlg::ReadSetting()
+{
+	Json::Value root;
+	std::ifstream ifs;
+	ifs.open("Setting.json");
+
+	Json::CharReaderBuilder builder;
+	builder["collectComments"] = true;
+	JSONCPP_STRING errs;
+	if (!parseFromStream(builder, ifs, &root, &errs)) {
+		return root;
+	}
+	return root;
+	/*
+	Json::Reader reader;
+	Json::Value root;
+
+	//从文件中读取，保证当前文件有demo.json文件
+	ifstream in("Setting.json", ios::binary);
+	if (!in.is_open())
+	{
+		cout << "Error opening file\n";
+		return root;
+	}
+
+	if (reader.parse(in, root))
+	{
+		//读取根节点信息
+		string IP = root["IP_Detector"].asString();
+		int port = root["Port_Detector"].asInt();
+
+
+		//读取子节点信息
+		string friend_name = root["friends"]["friend_name"].asString();
+		int friend_age = root["friends"]["friend_age"].asInt();
+		string friend_sex = root["friends"]["friend_sex"].asString();
+
+		//读取数组信息
+		for (unsigned int i = 0; i < root["hobby"].size(); i++)
+		{
+			string ach = root["hobby"][i].asString();
+		}
+	}
+	in.close();
+	return root;
+	*/
+}
+
+// 写入配置文件，实际上是修改配置文件
+void CNGammaMonitorDlg::WriteSetting(Json::Value myJson)
+{
+	ofstream os;
+	os.open("Setting.json", std::ios::out);
+	Json::StreamWriterBuilder sw;
+	const std::unique_ptr<Json::StreamWriter> writer(sw.newStreamWriter());
+	if (os.is_open())
+	{
+		writer->write(myJson, &os);
+	}
+	os.close();
+}
+
+//限制端口输入范围0~65535
+void CNGammaMonitorDlg::OnEnKillfocusPort1()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	UpdateData(true);
+	if ((sPort < 0) || (sPort > 65535))
+	{
+		MessageBox(_T("端口的范围为0~65535\n"));
+		if (sPort > 65535)
+		{
+			sPort = 65535;
+		}
+		else
+		{
+			sPort = 1;
+		}
+		UpdateData(false);
+	}
+}
+
+//限制端口输入范围0~65535
+void CNGammaMonitorDlg::OnEnKillfocusUDPPort()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	UpdateData(true);
+	if ((sPort < 0) || (sPort > 65535))
+	{
+		MessageBox(_T("端口的范围为0~65535\n"));
+		if (sPort > 65535)
+		{
+			sPort = 65535;
+		}
+		else
+		{
+			sPort = 1;
+		}
+		UpdateData(false);
+	}
+}
+
+//线程1，接收TCP网口数据
+UINT Recv_Th1(LPVOID p)
+{
+	CNGammaMonitorDlg* dlg = (CNGammaMonitorDlg*)AfxGetApp()->GetMainWnd();
+	while (1)
+	{
+		// 断开网络后关闭本线程
+		if (!dlg->connectStatus) return 0;
+
+		if (dlg->MeasureStatus || dlg->AutoMeasureStatus)
+		{
+			const int dataLen = 10000; //接收的数据包长度
+			char mk[dataLen]; 
+
+			//连接网络后时常判断联网状态
+			int nLength;
+			//int recvTimeout = 4 * 1000;  //4s
+			//测量状态是等待超过recvTimeout就不再等待
+			//setsockopt(dlg->mySocket, SOL_SOCKET, SO_RCVTIMEO, (char*)&recvTimeout, sizeof(int));
+			nLength = recv(dlg->mySocket, mk, dataLen, 0);
+			if (nLength == -1) //超过recvTimeout不再有数据，关闭该线程
+			{
+				return 0;
+			}
+			else {
+				dlg->GetDataStatus = TRUE;
+				dlg->saveFile(dlg->m_targetID, mk, nLength);
+			}
+		}
+	}
+	return 0;
+}
+
+//定时器
+void CNGammaMonitorDlg::OnTimer(UINT_PTR nIDEvent) {
+	// 计时3000ms。定时结束后向网口发送停止指令
+	switch (nIDEvent)
+	{
+	case 1:
+		if (GetDataStatus) {
+			timer++;
+			if (timer * 100 > 3000) {
+				send(mySocket, Order::Stop, 24, 0);
+				SetDlgItemText(IDC_Start, _T("开始测量"));
+				timer = 0;
+				GetDataStatus = FALSE;
+				MeasureStatus = FALSE;
+			}
+		}
+		break;
+	case 2:
+		// 检测炮号是否更新，若更新，则发送开始指令
+		/*
+		if (m_getTargetChange) {
+			send(mySocket, Order::Start, 24, 0);
+			m_getTargetChange = FALSE;
+			//刷新炮号
+			UpdateData(FALSE);
+		}
+		*/
+		// 硬件触发后3秒定时发送关闭指令
+		if (GetDataStatus) {
+			timer++;
+			if (timer * 100 > 3000) {
+				if(mySocket != NULL) send(mySocket, Order::Stop, 24, 0);
+				timer = 0;
+				GetDataStatus = FALSE;
+				CString info = _T("炮号：") + m_targetID + _T("测量结束!测试数据存储路径：")
+								+ saveAsPath;
+				SetDlgItemText(IDC_INFORMATION, info);
+			}
+		}
+		break;
+	case 3:
+		//定时检测炮号是否刷新
+		if (m_getTargetChange) {
+			if(mySocket != NULL) send(mySocket, Order::Start, 24, 0);
+			m_getTargetChange = FALSE;
+			//刷新炮号
+			UpdateData(FALSE);
+		}
+		break;
+	default:
+		break;
+	}
+	CDialogEx::OnTimer(nIDEvent);
+}
+
+//开始测量——手动测量
+void CNGammaMonitorDlg::OnBnClickedStart()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	GetDlgItem(IDC_Start)->EnableWindow(FALSE);
+
+	CString strTemp;
+	GetDlgItemText(IDC_Start, strTemp);
+	if (strTemp == _T("开始测量")) {
+		MeasureStatus = TRUE;
+		send(mySocket, Order::Start, 24, 0);
+		SetDlgItemText(IDC_Start, _T("停止测量"));
+		SetTimer(1, 100, NULL); //开启定时器，第1个参数表示ID号，第二个参数表示刷新时间ms
+	}
+	else {
+		MeasureStatus = FALSE;
+		send(mySocket, Order::Stop, 24, 0);
+		SetDlgItemText(IDC_Start, _T("开始测量"));
+		KillTimer(1);	//关闭定时器
+	}
+	
+	GetDlgItem(IDC_Start)->EnableWindow(TRUE);
+}
+
+//自动测量按钮
+void CNGammaMonitorDlg::OnBnClickedAutomeasure()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	
+	GetDlgItem(IDC_AutoMeasure)->EnableWindow(FALSE);
+
+	CString strTemp;
+	GetDlgItemText(IDC_AutoMeasure, strTemp);
+	if (strTemp == _T("自动测量")) {
+		AutoMeasureStatus = TRUE;
+		OpenUDP();
+		SetDlgItemText(IDC_AutoMeasure, _T("停止测量"));
+
+		//开启定时器，第1个参数表示ID号，第二个参数表示刷新时间ms
+		SetTimer(2, 100, NULL);  //100
+
+		// 锁死其他相关按键
+		GetDlgItem(IDC_Start)->EnableWindow(FALSE); //手动测量
+		GetDlgItem(IDC_CONNECT1)->EnableWindow(FALSE); //连接网络
+	}
+	else {
+		AutoMeasureStatus = FALSE;
+		if (mySocket != NULL) send(mySocket, Order::Stop, 24, 0);
+		SetDlgItemText(IDC_AutoMeasure, _T("自动测量"));
+		CloseUDP();
+
+		//关闭定时器
+		KillTimer(2);	
+
+		// 打开其他相关按键使能
+		GetDlgItem(IDC_Start)->EnableWindow(TRUE); //手动测量
+		GetDlgItem(IDC_CONNECT1)->EnableWindow(TRUE); //连接网络
+	}
+
+	GetDlgItem(IDC_AutoMeasure)->EnableWindow(TRUE);
+}
+
+// 打开UDP通信
+void CNGammaMonitorDlg::OpenUDP() 
+{
+	UpdateData(TRUE); //读取界面控件的输入值
+	//--------------1.创建UDPSocket------------
+	if (m_UDPSocket != NULL) delete m_UDPSocket;
+	m_UDPSocket = new CClientSocket(this);//初始化,新创建一个对话框Socket
+	m_UDPSocket->Create(m_UDPPort, SOCK_DGRAM, NULL);
+
+	//--------------2.获取Socket绑定的ip和端口--------------
+	//获取本机的IP和端口号
+	CString strIp;
+	UINT uiPort;
+
+	//获取本地的服务号和端口号
+	m_UDPSocket->GetSockName(strIp, uiPort);
+
+	//显示本地的端口号和IP号
+	SetDlgItemText(IDC_UDPIP, strIp);
+	SetDlgItemInt(IDC_UDPPORT, uiPort);
+}
+
+void CNGammaMonitorDlg::CloseUDP() {
+	if (m_UDPSocket != NULL) delete m_UDPSocket;
+}
+
+void CNGammaMonitorDlg::saveFile(CString myID, const char* mk, int length) {
+	CString tempTarget;
+	tempTarget.Format(_T("%d"), myID);  //Use Unicode Character Set
+	CString filename = tempTarget + _T(".txt");
+	
+	CString wholePath = saveAsPath + filename;
+	/*
+	CStdioFile mFile;
+	//打开文件
+	mFile.Open(filename, CFile::modeCreate | CFile::modeNoTruncate | CFile::modeWrite); //追加方式打开文件
+	mFile.Write(message, sizeof(message));
+	mFile.Flush();
+	mFile.Close();
+	*/
+	fstream datafile(wholePath, ios::out | ios::app | ios::binary);   // 追加
+	for (int i = 0; i < length; i++) {
+		datafile << mk[i];
+	}
+	datafile.close();
+}
+
+void CNGammaMonitorDlg::OnBnClickedSaveas()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	//获取目录路径
+	TCHAR   szPath[MAX_PATH] = { 0 };
+	LPITEMIDLIST   pitem;
+	BROWSEINFO   info;
+	::ZeroMemory(&info, sizeof(info));
+	info.hwndOwner = this->m_hWnd;
+	info.lpszTitle = _T("请选择路径: ");
+	info.pszDisplayName = szPath;
+	if (pitem = ::SHBrowseForFolder(&info))
+	{
+		::SHGetPathFromIDList(pitem, szPath);
+		saveAsPath = szPath;
+
+		CString str = saveAsPath += "\\";
+		UpdateData(FALSE);
+
+	}
+}
