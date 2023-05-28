@@ -8,6 +8,8 @@
 #include "json/json.h"
 #include "LEDButton.h"
 #include "CClientSocket.h"
+#include "UDP_RecieveLog.h"
+#include "RunningLog.h"
 
 UINT Recv_Th1(LPVOID p); // 多线程接收网口数据
 
@@ -37,6 +39,10 @@ public:
 	BOOL m_getTargetChange; // 检测炮号是否变化
 	int timer; // 计时器，满三秒后则发送停止测量
 	CString saveAsPath; //数据存储路径
+
+	RunningLog* m_page1;
+	UDP_RecieveLog* m_page2;
+	int m_currentTab;
 
 // 对话框数据
 #ifdef AFX_DESIGN_TIME
@@ -82,4 +88,6 @@ public:
 	// 日志编辑框
 	CEdit m_LogEdit;
 	CString m_LogEditStr;
+	afx_msg void OnTcnSelchangeTab1(NMHDR* pNMHDR, LRESULT* pResult);
+	CTabCtrl m_Tab;
 };

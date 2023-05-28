@@ -21,6 +21,11 @@ void CClientSocket::OnReceive(int nErrorCode)
 	char recBuf[Len] = {0};
 	int sockAddrLen = sizeof(SOCKADDR_IN);
 	int nLength = ReceiveFrom(recBuf, Len, (SOCKADDR*)&ClientAddr, &sockAddrLen, 0);
+	
+	// ÈÕÖ¾¼ÇÂ¼
+	CString tempStr(recBuf);
+	this->m_pMainDlg->m_page2->PrintLog(_T("RECV ASCII: ") + tempStr);
+
 	if (recBuf[0] == '+' && recBuf[1] == 'P' && recBuf[2] == 'L' && recBuf[3] == 'S') {
 		//int tmp = '0';
 		//int newID = (recBuf[5] - tmp) * 10000 + (recBuf[6] - tmp) * 1000 + (recBuf[7] - tmp) * 100

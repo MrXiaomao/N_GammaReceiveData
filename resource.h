@@ -7,6 +7,8 @@
 #define IDS_ABOUTBOX                    101
 #define IDD_NGAMMAMONITOR_DIALOG        102
 #define IDP_SOCKETS_INIT_FAILED         103
+#define IDD_UDP_RecieveLog              104
+#define IDD_RunningLog                  105
 #define IDR_MAINFRAME                   128
 #define IDR_NUCLEAR                     130
 #define IDC_IPADDRESS1                  1000
@@ -34,15 +36,18 @@
 #define IDC_LOG                         1023
 #define IDC_CLEAR_LOG                   1024
 #define IDC_UDP_BUTTON                  1025
-#define IDC_TAB1                        1027
+#define IDC_TAB1                        1030
+#define IDC_UDP_LOG                     1031
+#define IDC_EDIT1                       1035
+#define IDC_RUNNING_LOG                 1035
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        132
+#define _APS_NEXT_RESOURCE_VALUE        138
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1028
-#define _APS_NEXT_SYMED_VALUE           101
+#define _APS_NEXT_CONTROL_VALUE         1036
+#define _APS_NEXT_SYMED_VALUE           106
 #endif
 #endif

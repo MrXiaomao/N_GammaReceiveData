@@ -53,11 +53,16 @@ void CNGammaMonitorDlg::OpenUDP()
 	CString info;
 	info.Format(_T("UDP已打开，端口号为:%d"), uiPort);
 	PrintLog(info);
+	m_page1->PrintLog(info);
+	m_page2->PrintLog(info);
 }
 
 void CNGammaMonitorDlg::CloseUDP() {
 	if (m_UDPSocket != NULL) delete m_UDPSocket;
-	PrintLog(_T("UDP网络已关闭"));
+	CString info = _T("UDP网络已关闭");
+	PrintLog(info);
+	m_page1->PrintLog(info);
+	m_page2->PrintLog(info);
 }
 
 void CNGammaMonitorDlg::SaveFile(CString myID, const char* mk, int length) {

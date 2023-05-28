@@ -60,6 +60,7 @@ CNGammaMonitorDlg::CNGammaMonitorDlg(CWnd* pParent /*=nullptr*/)
 	, GetDataStatus(FALSE)
 	, m_getTargetChange(FALSE)
 	, timer(0)
+	, m_currentTab(0)
 	, saveAsPath("")
 	, sPort(6000)
 	, m_targetID(_T(""))
@@ -70,7 +71,7 @@ CNGammaMonitorDlg::CNGammaMonitorDlg(CWnd* pParent /*=nullptr*/)
 
 CNGammaMonitorDlg::~CNGammaMonitorDlg()
 {
-	KillTimer(3); //炮号刷新的计时器
+	//KillTimer(3); //炮号刷新的计时器
 	if (!m_UDPSocket) delete m_UDPSocket;
 }
 
@@ -87,6 +88,7 @@ void CNGammaMonitorDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_UDPPORT, m_UDPPort);
 	DDX_Control(pDX, IDC_LOG, m_LogEdit);
 	DDX_Text(pDX, IDC_LOG, m_LogEditStr);
+	DDX_Control(pDX, IDC_TAB1, m_Tab);
 }
 
 BEGIN_MESSAGE_MAP(CNGammaMonitorDlg, CDialogEx)
@@ -102,6 +104,7 @@ BEGIN_MESSAGE_MAP(CNGammaMonitorDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_SaveAs, &CNGammaMonitorDlg::OnBnClickedSaveas)
 	ON_BN_CLICKED(IDC_CLEAR_LOG, &CNGammaMonitorDlg::OnBnClickedClearLog)
 	ON_BN_CLICKED(IDC_UDP_BUTTON, &CNGammaMonitorDlg::OnBnClickedUdpButton)
+	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB1, &CNGammaMonitorDlg::OnTcnSelchangeTab1)
 END_MESSAGE_MAP()
 
 
@@ -142,7 +145,39 @@ BOOL CNGammaMonitorDlg::OnInitDialog()
 	m_NetStatusLED.RefreshWindow(FALSE);//设置指示灯
 	m_TriggerType.SetCurSel(0); // 设置下拉框默认选项
 	
-	// 获取当前程序（.exe文件）所在路径
+	//----------------------------窗口切换-------------
+	m_page1 = new RunningLog;
+	m_page2 = new UDP_RecieveLog;
+	//为Tab Control增加两个页面   
+	m_Tab.InsertItem(0, _T("系统运行日志"));
+	m_Tab.InsertItem(1, _T("UDP运行日志"));
+
+	//创建两个对话框   
+	m_page1->Create(IDD_RunningLog, &m_Tab);
+	m_page2->Create(IDD_UDP_RecieveLog, &m_Tab);
+	
+	//设定在Tab内显示的范围
+	// 方式一、保持子控件大小
+	CRect rc;
+	m_Tab.GetClientRect(rc);
+	rc.top += 20;
+	CRect rc2(rc);
+	m_page1->MoveWindow(&rc);
+	m_page2->MoveWindow(&rc2);
+	// 子控件与母控件保持大小一致
+	/*
+	CRect TempRect;
+	::GetWindowRect(GetDlgItem(IDC_TAB1)->GetSafeHwnd(), TempRect);//以屏幕坐标 获得ChildWhd的矩形大小
+	ScreenToClient(TempRect);//转换成客户坐标
+
+	m_page1->MoveWindow(0, 20, TempRect.Width(), TempRect.Height());
+	m_page2->MoveWindow(0, 20, TempRect.Width(), TempRect.Height());
+	*/
+	//显示初始页面   
+	m_page1->ShowWindow(SW_SHOW);
+	m_page2->ShowWindow(SW_HIDE);
+
+	// -----------------------获取当前程序（.exe文件）所在路径----------------
 	CString strexe, strpath;
 	::GetModuleFileName(NULL, strexe.GetBufferSetLength(MAX_PATH + 1), MAX_PATH);
 	int k = 0;
@@ -155,7 +190,7 @@ BOOL CNGammaMonitorDlg::OnInitDialog()
 	}
 	saveAsPath = strexe.Left(k);
 
-	// 读取配置参数并设置到相应控件上
+	// ------------------读取配置参数并设置到相应控件上---------------------
 	CString StrSerIp = _T("192.168.10.22");
 	Json::Value jsonSetting = ReadSetting();
 	if (!jsonSetting.isNull()) {
@@ -269,6 +304,7 @@ void CNGammaMonitorDlg::OnConnect()
 			info.Format(_T("，端口号：%d"), sPort);
 			info = _T("TCP网络连接失败，请检查网络，当前网址IP：") + StrSerIp + info;
 			PrintLog(info);
+			m_page1->PrintLog(info);
 			// 恢复各个按钮使能状态
 			GetDlgItem(IDC_CONNECT1)->EnableWindow(TRUE);
 			GetDlgItem(IDC_IPADDRESS1)->EnableWindow(TRUE); //恢复IP地址编辑状态
@@ -279,6 +315,7 @@ void CNGammaMonitorDlg::OnConnect()
 		info.Format(_T("，端口号：%d"), sPort);
 		info = _T("TCP网络已连接，网址IP：") + StrSerIp + info;
 		PrintLog(info);
+		m_page1->PrintLog(info);
 
 		connectStatus = TRUE;
 		m_NetStatusLED.RefreshWindow(TRUE);//打开指示灯
@@ -301,6 +338,7 @@ void CNGammaMonitorDlg::OnConnect()
 		GetDlgItem(IDC_IPADDRESS1)->EnableWindow(TRUE); //恢复IP地址编辑状态
 		GetDlgItem(IDC_PORT1)->EnableWindow(TRUE); //恢复端口编辑
 		PrintLog(_T("TCP网络已断开"));
+		m_page1->PrintLog(_T("TCP网络已断开"));
 	}
 	GetDlgItem(IDC_CONNECT1)->EnableWindow(TRUE); // 恢复按钮使能
 }
@@ -356,6 +394,7 @@ void CNGammaMonitorDlg::OnTimer(UINT_PTR nIDEvent) {
 				CString info = _T("炮号：") + m_targetID + _T("测量结束!测试数据存储路径：")
 					+ saveAsPath;
 				PrintLog(info);
+				m_page1->PrintLog(info);
 			}
 		}
 		break;
@@ -372,6 +411,7 @@ void CNGammaMonitorDlg::OnTimer(UINT_PTR nIDEvent) {
 				CString info = _T("炮号：") + m_targetID + _T("测量结束！测试数据存储路径：")
 								+ saveAsPath;
 				PrintLog(info);
+				m_page1->PrintLog(info);
 			}
 		}
 		break;
@@ -385,6 +425,7 @@ void CNGammaMonitorDlg::OnTimer(UINT_PTR nIDEvent) {
 
 			CString info = _T("炮号已刷新：") + m_targetID;
 			PrintLog(info);
+			m_page1->PrintLog(info);
 
 			//刷新炮号
 			UpdateData(FALSE);
@@ -413,6 +454,7 @@ void CNGammaMonitorDlg::OnBnClickedStart()
 		CString info;
 		info = _T("开始测量（手动测量），等待触发信号");
 		PrintLog(info);
+		m_page1->PrintLog(info);
 	}
 	else {
 		MeasureStatus = FALSE;
@@ -423,6 +465,7 @@ void CNGammaMonitorDlg::OnBnClickedStart()
 		CString info;
 		info = _T("已停止测量");
 		PrintLog(info);
+		m_page1->PrintLog(info);
 	}
 	
 	GetDlgItem(IDC_Start)->EnableWindow(TRUE);
@@ -471,6 +514,23 @@ void CNGammaMonitorDlg::OnBnClickedClearLog()
 {
 	// TODO: 在此添加控件通知处理程序代码
 	SetDlgItemText(IDC_LOG, _T(""));
+
+	CRect rc;
+	m_Tab.GetClientRect(rc);
+	rc.top += 20;
+	switch (m_currentTab)
+	{
+	case 0:
+		m_page1->m_Information = _T("");
+		m_page1->UpdateData(FALSE);
+		m_page1->MoveWindow(&rc);
+		break;
+	case 1:
+		m_page2->m_Information = _T("");
+		m_page2->UpdateData(FALSE);
+		m_page2->MoveWindow(&rc);
+		break;
+	}
 }
 
 void CNGammaMonitorDlg::OnBnClickedUdpButton()
@@ -488,4 +548,26 @@ void CNGammaMonitorDlg::OnBnClickedUdpButton()
 		CloseUDP();
 		SetDlgItemText(IDC_UDP_BUTTON, _T("开启UDP网络"));
 	}
+}
+
+
+void CNGammaMonitorDlg::OnTcnSelchangeTab1(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	// TODO: 在此添加控件通知处理程序代码
+	*pResult = 0;
+	m_currentTab = m_Tab.GetCurSel();
+	switch (m_currentTab)
+	{
+	case 0:
+		m_page1->ShowWindow(SW_SHOW);
+		m_page2->ShowWindow(SW_HIDE);
+		m_page1->UpdateData(FALSE);
+		break;
+	case 1:
+		m_page1->ShowWindow(SW_HIDE);
+		m_page2->ShowWindow(SW_SHOW);
+		m_page2->UpdateData(FALSE);
+		break;
+	}
+	*pResult = 0;
 }
