@@ -66,7 +66,7 @@ void CNGammaMonitorDlg::SaveFile(CString myID, const char* mk, int length) {
 	tempTarget.Format(_T("%d"), myID);  //Use Unicode Character Set
 	CString filename = tempTarget + _T(".txt");
 	*/
-	CString filename = myID + _T(".txt");
+	CString filename = myID + _T(".dat");
 
 	CString wholePath = saveAsPath + filename;
 	/*

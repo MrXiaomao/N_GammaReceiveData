@@ -352,6 +352,7 @@ void CNGammaMonitorDlg::OnTimer(UINT_PTR nIDEvent) {
 				timer = 0;
 				GetDataStatus = FALSE;
 				MeasureStatus = FALSE;
+
 				CString info = _T("炮号：") + m_targetID + _T("测量结束!测试数据存储路径：")
 					+ saveAsPath;
 				PrintLog(info);
@@ -359,15 +360,16 @@ void CNGammaMonitorDlg::OnTimer(UINT_PTR nIDEvent) {
 		}
 		break;
 	case 2:
-		
 		// 硬件触发后3秒定时发送关闭指令
-		if (GetDataStatus) {
+		if (GetDataStatus && MeasureStatus) {
 			timer++;
 			if (timer * 100 > 3000) {
 				if(mySocket != NULL) send(mySocket, Order::Stop, 24, 0);
 				timer = 0;
 				GetDataStatus = FALSE;
-				CString info = _T("炮号：") + m_targetID + _T("测量结束!测试数据存储路径：")
+				MeasureStatus = FALSE;
+
+				CString info = _T("炮号：") + m_targetID + _T("测量结束！测试数据存储路径：")
 								+ saveAsPath;
 				PrintLog(info);
 			}
@@ -377,9 +379,13 @@ void CNGammaMonitorDlg::OnTimer(UINT_PTR nIDEvent) {
 		//定时检测炮号是否刷新,若刷新，则发送开始指令
 		if (m_getTargetChange) {
 			if(mySocket != NULL) send(mySocket, Order::Start, 24, 0);
+			
+			MeasureStatus = TRUE;
+			m_getTargetChange = FALSE;
+
 			CString info = _T("炮号已刷新：") + m_targetID;
 			PrintLog(info);
-			m_getTargetChange = FALSE;
+
 			//刷新炮号
 			UpdateData(FALSE);
 		}
