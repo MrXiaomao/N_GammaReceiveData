@@ -317,7 +317,8 @@ static String valueToQuotedStringN(const char* value, unsigned length,
     // Should add a flag to allow this compatibility mode and prevent this
     // sequence from occurring.
     default: {
-      if (emitUTF8) {
+ /* by xiaomao 
+        if (emitUTF8) {
         unsigned codepoint = static_cast<unsigned char>(*c);
         if (codepoint < 0x20) {
           appendHex(result, codepoint);
@@ -339,7 +340,8 @@ static String valueToQuotedStringN(const char* value, unsigned length,
           appendHex(result, 0xd800 + ((codepoint >> 10) & 0x3ff));
           appendHex(result, 0xdc00 + (codepoint & 0x3ff));
         }
-      }
+      }*/
+        result += *c;
     } break;
     }
   }

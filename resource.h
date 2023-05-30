@@ -10,7 +10,7 @@
 #define IDD_UDP_RecieveLog              104
 #define IDD_RunningLog                  105
 #define IDR_MAINFRAME                   128
-#define IDR_NUCLEAR                     130
+#define IDR_NUCLEAR                     121
 #define IDC_IPADDRESS1                  1000
 #define IDC_PORT1                       1001
 #define IDC_CONNECT1                    1002

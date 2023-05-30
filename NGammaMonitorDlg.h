@@ -10,6 +10,8 @@
 #include "CClientSocket.h"
 #include "UDP_RecieveLog.h"
 #include "RunningLog.h"
+#include "MyConst.h"
+using namespace std;
 
 UINT Recv_Th1(LPVOID p); // 多线程接收网口数据
 
@@ -20,9 +22,7 @@ class CNGammaMonitorDlg : public CDialogEx
 public:
 	CNGammaMonitorDlg(CWnd* pParent = nullptr);	// 标准构造函数
 	virtual ~CNGammaMonitorDlg();
-	Json::Value ReadSetting(); // 读取配置文件
-	void WriteSetting(Json::Value myJson); // 写入配置文件
-	char* CstringToWideCharArry(CString CstrText);
+
 	void OpenUDP(); // 打开UDP通信
 	void CloseUDP(); //关闭UDP通信，以及相应资源
 	void SaveFile(CString myID, const char* mk, int length); // 保存文件

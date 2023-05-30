@@ -63,7 +63,7 @@ CNGammaMonitorDlg::CNGammaMonitorDlg(CWnd* pParent /*=nullptr*/)
 	, m_currentTab(0)
 	, saveAsPath("")
 	, sPort(6000)
-	, m_targetID(_T(""))
+	, m_targetID(_T("00000"))
 	, m_UDPPort(12100)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_NUCLEAR); //设置主界面图标
@@ -157,42 +157,26 @@ BOOL CNGammaMonitorDlg::OnInitDialog()
 	m_page2->Create(IDD_UDP_RecieveLog, &m_Tab);
 	
 	//设定在Tab内显示的范围
-	// 方式一、保持子控件大小
+	//子控件大小
 	CRect rc;
 	m_Tab.GetClientRect(rc);
 	rc.top += 20;
-	CRect rc2(rc);
 	m_page1->MoveWindow(&rc);
-	m_page2->MoveWindow(&rc2);
-	// 子控件与母控件保持大小一致
-	/*
-	CRect TempRect;
-	::GetWindowRect(GetDlgItem(IDC_TAB1)->GetSafeHwnd(), TempRect);//以屏幕坐标 获得ChildWhd的矩形大小
-	ScreenToClient(TempRect);//转换成客户坐标
+	m_page2->MoveWindow(&rc);
 
-	m_page1->MoveWindow(0, 20, TempRect.Width(), TempRect.Height());
-	m_page2->MoveWindow(0, 20, TempRect.Width(), TempRect.Height());
-	*/
 	//显示初始页面   
 	m_page1->ShowWindow(SW_SHOW);
 	m_page2->ShowWindow(SW_HIDE);
 
-	// -----------------------获取当前程序（.exe文件）所在路径----------------
-	CString strexe, strpath;
-	::GetModuleFileName(NULL, strexe.GetBufferSetLength(MAX_PATH + 1), MAX_PATH);
-	int k = 0;
-	int lo_point = strexe.ReverseFind('.');
-	int lo_x = strexe.ReverseFind('x');
-	int lo_e = strexe.ReverseFind('e');
-	if ((lo_point == lo_e - 3) && (lo_point == lo_x - 2))
-	{
-		k = lo_point - 25;
-	}
-	saveAsPath = strexe.Left(k);
+	saveAsPath = GetExeDir(); 
+	CString str = saveAsPath += "\\";
+	CString info = _T("实验数据默认保存路径：") + str;
+	PrintLog(info);
+	m_page1->PrintLog(info);
 
 	// ------------------读取配置参数并设置到相应控件上---------------------
 	CString StrSerIp = _T("192.168.10.22");
-	Json::Value jsonSetting = ReadSetting();
+	Json::Value jsonSetting = ReadSetting(_T("Setting.json"));
 	if (!jsonSetting.isNull()) {
 		StrSerIp = jsonSetting["IP_Detector"].asCString();
 		sPort = jsonSetting["Port_Detector"].asInt();
@@ -281,10 +265,10 @@ void CNGammaMonitorDlg::OnConnect()
 		char* pStrIP = CstringToWideCharArry(StrSerIp);
 
 		// 写入配置文件
-		Json::Value jsonSetting = ReadSetting();
+		Json::Value jsonSetting = ReadSetting(_T("Setting.json"));
 		jsonSetting["IP_Detector"] = pStrIP;
 		jsonSetting["Port_Detector"] = sPort;
-		WriteSetting(jsonSetting);
+		WriteSetting(_T("Setting.json"),jsonSetting);
 
 		sockaddr_in server_addr;
 		//server_addr.sin_addr.s_addr = inet_pton(pStrIP);// 网络IP "192.168.0.105"
